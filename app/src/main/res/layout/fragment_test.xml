@@ -1,38 +1,279 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="24dp"
-    android:gravity="center">
+    android:fillViewport="true">
 
-    <ImageView
-        android:layout_width="120dp"
-        android:layout_height="120dp"
-        android:layout_marginBottom="32dp"
-        android:src="@drawable/ic_launcher_foreground"
-        android:contentDescription="Test Icon"
-        app:tint="?attr/colorPrimary"
-        xmlns:app="http://schemas.android.com/apk/res-auto" />
-
-    <TextView
-        android:id="@+id/tvTitle"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="16dp"
-        android:textSize="24sp"
-        android:textStyle="bold"
-        android:textColor="?attr/colorOnSurface"
-        android:text="Test Fragment" />
-
-    <TextView
-        android:id="@+id/tvDescription"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textSize="16sp"
-        android:textColor="?attr/colorOnSurfaceVariant"
-        android:lineSpacingExtra="4dp"
-        android:gravity="center"
-        android:text="Fragment description will be set in code" />
+        android:orientation="vertical"
+        android:padding="24dp">
 
-</LinearLayout>
+        <!-- Header Section -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:layout_marginBottom="32dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:textSize="28sp"
+                android:textStyle="bold"
+                android:textColor="?attr/colorOnSurface"
+                android:text="Vocabulary Test" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="16sp"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:gravity="center"
+                android:lineSpacingExtra="2dp"
+                android:text="Uji kemampuan vocabulary Anda dengan berbagai pilihan durasi dan jumlah soal" />
+
+        </LinearLayout>
+
+        <!-- Duration Selection Container -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/rounded_card_background"
+            android:padding="20dp"
+            android:layout_marginBottom="24dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="?attr/colorOnSurface"
+                android:text="Pilih Durasi Ujian" />
+
+            <RadioGroup
+                android:id="@+id/rgDuration"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp">
+
+                <RadioButton
+                    android:id="@+id/rbDuration5"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="5 Menit"
+                    android:textSize="16sp"
+                    android:padding="8dp"
+                    android:buttonTint="?attr/colorPrimary" />
+
+                <RadioButton
+                    android:id="@+id/rbDuration10"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="10 Menit"
+                    android:textSize="16sp"
+                    android:padding="8dp"
+                    android:buttonTint="?attr/colorPrimary" />
+
+                <RadioButton
+                    android:id="@+id/rbDuration15"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="15 Menit"
+                    android:textSize="16sp"
+                    android:padding="8dp"
+                    android:buttonTint="?attr/colorPrimary" />
+
+                <RadioButton
+                    android:id="@+id/rbDurationUnlimited"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Tanpa Batas Waktu"
+                    android:textSize="16sp"
+                    android:padding="8dp"
+                    android:buttonTint="?attr/colorPrimary" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <RadioButton
+                        android:id="@+id/rbDurationCustom"
+                        android:layout_width="37dp"
+                        android:layout_height="wrap_content"
+                        android:buttonTint="?attr/colorPrimary" />
+
+                    <EditText
+                        android:id="@+id/etCustomDurationText"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:inputType="number"
+                        android:hint="Masukkan durasi"
+                        android:textSize="16sp"
+                        android:padding="12dp"
+                        android:background="@drawable/rounded_edittext_background"
+                        android:layout_marginEnd="8dp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Menit"
+                        android:textSize="16sp"
+                        android:textColor="?attr/colorOnSurface" />
+
+                </LinearLayout>
+
+            </RadioGroup>
+
+        </LinearLayout>
+
+        <!-- Question Count Selection Container -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/rounded_card_background"
+            android:padding="20dp"
+            android:layout_marginBottom="24dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="?attr/colorOnSurface"
+                android:text="Jumlah Soal" />
+
+            <RadioGroup
+                android:id="@+id/rgQuestionCount"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp">
+
+                <RadioButton
+                    android:id="@+id/rbQuestion10"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="10 Soal"
+                    android:textSize="16sp"
+                    android:padding="8dp"
+                    android:buttonTint="?attr/colorPrimary" />
+
+                <RadioButton
+                    android:id="@+id/rbQuestion20"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="20 Soal"
+                    android:textSize="16sp"
+                    android:padding="8dp"
+                    android:buttonTint="?attr/colorPrimary" />
+
+                <RadioButton
+                    android:id="@+id/rbQuestion50"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="50 Soal"
+                    android:textSize="16sp"
+                    android:padding="8dp"
+                    android:buttonTint="?attr/colorPrimary" />
+
+                <RadioButton
+                    android:id="@+id/rbQuestion100"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="100 Soal"
+                    android:textSize="16sp"
+                    android:padding="8dp"
+                    android:buttonTint="?attr/colorPrimary" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <RadioButton
+                        android:id="@+id/rbQuestionCustom"
+                        android:layout_height="wrap_content"
+                        android:padding="8dp"
+                        android:layout_width="37dp"
+                        android:buttonTint="?attr/colorPrimary" />
+
+                    <EditText
+                        android:id="@+id/etCustomQuestionsText"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:inputType="number"
+                        android:hint="Masukkan jumlah soal"
+                        android:textSize="16sp"
+                        android:padding="12dp"
+                        android:background="@drawable/rounded_edittext_background"
+                        android:layout_marginEnd="8dp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Soal"
+                        android:textSize="16sp"
+                        android:textColor="?attr/colorOnSurface" />
+
+                </LinearLayout>
+
+            </RadioGroup>
+
+        </LinearLayout>
+
+        <!-- Instructions -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/rounded_info_background"
+            android:padding="16dp"
+            android:layout_marginBottom="32dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textColor="?attr/colorOnSurface"
+                android:text="📝 Petunjuk:" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="14sp"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:lineSpacingExtra="2dp"
+                android:text="• Pilih durasi ujian dan jumlah soal yang diinginkan\n• Untuk opsi custom, masukkan angka pada kolom yang tersedia\n• Pastikan koneksi internet stabil\n• Ujian akan dimulai setelah menekan tombol Mulai\n• Jawaban akan tersimpan otomatis" />
+
+        </LinearLayout>
+
+        <!-- Start Button -->
+        <Button
+            android:id="@+id/btnStart"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="Mulai Ujian"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:background="@drawable/rounded_button_background"
+            android:textColor="@android:color/white"
+            android:elevation="4dp" />
+
+    </LinearLayout>
+
+</ScrollView>
