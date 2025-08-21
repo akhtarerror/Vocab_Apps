@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <item
+        android:id="@+id/action_select"
+        android:title="Select"
+        android:icon="@drawable/ic_select"
+        app:showAsAction="ifRoom" />
+
+    <item
+        android:id="@+id/action_select_all"
+        android:title="Pilih Semua"
+        android:icon="@drawable/ic_select_all"
+        android:visible="false"
+        app:showAsAction="ifRoom" />
+
+    <item
+        android:id="@+id/action_search"
+        android:title="Cari Vocab"
+        android:icon="@drawable/ic_search"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_move_item"
+        android:title="Pindah Item"
+        android:icon="@drawable/ic_search"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_delete_all_indonesian"
+        android:title="Hapus Semua Bahasa Indonesia"
+        app:showAsAction="never" />
+
+</menu>
