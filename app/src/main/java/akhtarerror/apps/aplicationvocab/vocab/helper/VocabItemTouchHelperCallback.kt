@@ -1,5 +1,6 @@
-package akhtarerror.apps.aplicationvocab
+package akhtarerror.apps.aplicationvocab.vocab.helper
 
+import akhtarerror.apps.aplicationvocab.adapter.VocabAdapter
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
 
@@ -30,7 +31,8 @@ class VocabItemTouchHelperCallback(
         val toPosition = target.adapterPosition
 
         if (fromPosition != RecyclerView.NO_POSITION && toPosition != RecyclerView.NO_POSITION) {
-            adapter.moveItem(fromPosition, toPosition)
+            // Don't update adapter directly, just notify about the move
+            onItemMoved(fromPosition, toPosition)
             return true
         }
         return false
@@ -49,6 +51,7 @@ class VocabItemTouchHelperCallback(
                 viewHolder?.itemView?.alpha = 0.8f
                 viewHolder?.itemView?.scaleX = 1.05f
                 viewHolder?.itemView?.scaleY = 1.05f
+                viewHolder?.itemView?.elevation = 8f
             }
         }
     }
@@ -60,19 +63,18 @@ class VocabItemTouchHelperCallback(
         viewHolder.itemView.alpha = 1.0f
         viewHolder.itemView.scaleX = 1.0f
         viewHolder.itemView.scaleY = 1.0f
-
-        // Notify that the item has been moved (to update numbering)
-        val position = viewHolder.adapterPosition
-        if (position != RecyclerView.NO_POSITION) {
-            onItemMoved(position, position) // This will trigger save and number update
-        }
+        viewHolder.itemView.elevation = 2f
     }
 
     override fun isLongPressDragEnabled(): Boolean {
-        return false // We'll handle drag initiation manually through the drag handle
+        return false // We handle drag initiation manually through the drag handle
     }
 
     override fun isItemViewSwipeEnabled(): Boolean {
         return false
+    }
+
+    override fun canDropOver(recyclerView: RecyclerView, current: RecyclerView.ViewHolder, target: RecyclerView.ViewHolder): Boolean {
+        return isMoveMode()
     }
 }

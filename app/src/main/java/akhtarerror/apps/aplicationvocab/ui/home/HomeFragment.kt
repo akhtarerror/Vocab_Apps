@@ -1,7 +1,12 @@
-package akhtarerror.apps.aplicationvocab
+package akhtarerror.apps.aplicationvocab.ui.home
 
-import android.content.Context
-import android.content.SharedPreferences
+import akhtarerror.apps.aplicationvocab.R
+import akhtarerror.apps.aplicationvocab.adapter.VocabAdapter
+import akhtarerror.apps.aplicationvocab.database.migration.DataMigration
+import akhtarerror.apps.aplicationvocab.vocab.helper.VocabItemTouchHelperCallback
+import akhtarerror.apps.aplicationvocab.vocab.item.VocabItem
+import akhtarerror.apps.aplicationvocab.vocab.viewmodel.VocabViewModel
+import android.graphics.Rect
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.Menu
@@ -10,18 +15,24 @@ import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.floatingactionbutton.FloatingActionButton
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class HomeFragment : Fragment() {
 
@@ -29,20 +40,18 @@ class HomeFragment : Fragment() {
     private lateinit var fabAdd: FloatingActionButton
     private lateinit var fabDelete: FloatingActionButton
     private lateinit var tvSelectedCount: TextView
+    private lateinit var tvEmptyState: TextView
     private lateinit var adapter: VocabAdapter
-    private lateinit var sharedPreferences: SharedPreferences
     private lateinit var itemTouchHelper: ItemTouchHelper
-    private val gson = Gson()
+    private lateinit var vocabViewModel: VocabViewModel
 
-    private val vocabList = mutableListOf<VocabItem>()
     private var isSelectMode = false
     private var isMoveMode = false
-    private val selectedItems = mutableSetOf<Int>()
+    private val selectedItems = mutableSetOf<Long>() // Changed to Long for Room IDs
+    private var currentVocabList = mutableListOf<VocabItem>()
 
-    companion object {
-        private const val PREF_NAME = "vocab_preferences"
-        private const val VOCAB_LIST_KEY = "vocab_list"
-    }
+    // Coroutine scope for the fragment
+    private val fragmentScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -60,8 +69,11 @@ class HomeFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         initViews(view)
+        setupViewModel()
         setupRecyclerView()
-        loadVocabList()
+
+        // Migrate data from SharedPreferences if needed
+        migrateData()
 
         fabAdd.setOnClickListener {
             showAddEditDialog()
@@ -72,29 +84,73 @@ class HomeFragment : Fragment() {
         }
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        fragmentScope.cancel()
+    }
+
     private fun initViews(view: View) {
         recyclerView = view.findViewById(R.id.recyclerView)
         fabAdd = view.findViewById(R.id.fabAdd)
         fabDelete = view.findViewById(R.id.fabDelete)
         tvSelectedCount = view.findViewById(R.id.tvSelectedCount)
-        sharedPreferences = requireContext().getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        tvEmptyState = view.findViewById(R.id.tvEmptyState)
+    }
+
+    private fun setupViewModel() {
+        vocabViewModel = ViewModelProvider(this)[VocabViewModel::class.java]
+
+        // Observe vocabulary data changes
+        vocabViewModel.allVocab.observe(viewLifecycleOwner) { vocabList ->
+            currentVocabList.clear()
+            currentVocabList.addAll(vocabList)
+            adapter.submitList(vocabList.toList()) // Create new list for ListAdapter
+
+            // Show/hide empty state
+            if (vocabList.isEmpty()) {
+                tvEmptyState.visibility = View.VISIBLE
+                recyclerView.visibility = View.GONE
+            } else {
+                tvEmptyState.visibility = View.GONE
+                recyclerView.visibility = View.VISIBLE
+            }
+        }
+    }
+
+    private fun migrateData() {
+        fragmentScope.launch {
+            try {
+                DataMigration.Companion.migrateFromSharedPreferences(requireContext())
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        context,
+                        "Error during data migration: ${e.message}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        }
     }
 
     private fun setupRecyclerView() {
         adapter = VocabAdapter(
-            vocabList = vocabList,
             isSelectMode = { isSelectMode },
             isMoveMode = { isMoveMode },
             selectedItems = selectedItems,
-            onItemAction = { action, position ->
+            onItemAction = { action, vocab, position ->
                 when (action) {
-                    VocabAdapter.Action.EDIT -> showAddEditDialog(vocabList[position], position)
-                    VocabAdapter.Action.DELETE -> deleteVocabItem(position)
-                    VocabAdapter.Action.SELECT -> toggleItemSelection(position)
+                    VocabAdapter.Action.EDIT -> showAddEditDialog(vocab)
+                    VocabAdapter.Action.DELETE -> deleteVocabItem(vocab)
+                    VocabAdapter.Action.SELECT -> toggleItemSelection(vocab.id)
                     VocabAdapter.Action.CLICK -> {
                         if (isSelectMode) {
-                            toggleItemSelection(position)
+                            toggleItemSelection(vocab.id)
                         }
+                    }
+
+                    VocabAdapter.Action.MOVE -> {
+                        // Handle move completion
                     }
                 }
             }
@@ -105,11 +161,9 @@ class HomeFragment : Fragment() {
             adapter = adapter,
             isMoveMode = { isMoveMode },
             onItemMoved = { fromPosition, toPosition ->
-                // Update the entire list to refresh numbering
-                recyclerView.post {
-                    adapter.notifyDataSetChanged()
-                }
-                saveVocabList()
+                val newList = adapter.moveItem(fromPosition, toPosition)
+                // Update positions in database
+                vocabViewModel.updateVocabPositions(newList)
             }
         )
         itemTouchHelper = ItemTouchHelper(itemTouchHelperCallback)
@@ -118,7 +172,7 @@ class HomeFragment : Fragment() {
         recyclerView.layoutManager = LinearLayoutManager(context)
         recyclerView.adapter = adapter
 
-        // Add touch listener to handle drag initiation from drag handle
+        // Add touch listener for drag handle
         recyclerView.addOnItemTouchListener(object : RecyclerView.OnItemTouchListener {
             override fun onInterceptTouchEvent(rv: RecyclerView, e: MotionEvent): Boolean {
                 if (isMoveMode && e.action == MotionEvent.ACTION_DOWN) {
@@ -126,7 +180,7 @@ class HomeFragment : Fragment() {
                     if (childView != null) {
                         val dragHandle = childView.findViewById<View>(R.id.dragHandle)
                         if (dragHandle != null && dragHandle.visibility == View.VISIBLE) {
-                            val dragHandleRect = android.graphics.Rect()
+                            val dragHandleRect = Rect()
                             dragHandle.getGlobalVisibleRect(dragHandleRect)
 
                             val location = IntArray(2)
@@ -155,10 +209,7 @@ class HomeFragment : Fragment() {
         isSelectMode = false
         selectedItems.clear()
         updateUI()
-
-        recyclerView.post {
-            adapter.notifyDataSetChanged()
-        }
+        adapter.notifyDataSetChanged()
         activity?.invalidateOptionsMenu()
 
         val message = if (isMoveMode) {
@@ -170,13 +221,13 @@ class HomeFragment : Fragment() {
     }
 
     private fun showSearchDialog() {
-        if (vocabList.isEmpty()) {
+        if (currentVocabList.isEmpty()) {
             Toast.makeText(context, "Tidak ada vocabulary untuk dicari", Toast.LENGTH_SHORT).show()
             return
         }
 
         val dialogView = LayoutInflater.from(context).inflate(R.layout.dialog_search_vocab, null)
-        val etSearch = dialogView.findViewById<android.widget.EditText>(R.id.etSearch)
+        val etSearch = dialogView.findViewById<EditText>(R.id.etSearch)
 
         AlertDialog.Builder(requireContext())
             .setTitle("Cari Vocabulary")
@@ -191,148 +242,6 @@ class HomeFragment : Fragment() {
             }
             .setNegativeButton("Batal", null)
             .show()
-    }
-
-    private fun searchVocabulary(query: String) {
-        val searchResults = mutableListOf<Pair<Int, Int>>() // Pair<position, matchScore>
-
-        vocabList.forEachIndexed { index, vocab ->
-            var matchScore = 0
-            val lowerQuery = query.toLowerCase()
-
-            // Check if it's a number search
-            val queryAsNumber = query.toIntOrNull()
-            if (queryAsNumber != null && queryAsNumber == index + 1) {
-                matchScore += 100 // Highest priority for exact number match
-            }
-
-            // Check English word
-            val englishLower = vocab.english.toLowerCase()
-            when {
-                englishLower == lowerQuery -> matchScore += 90
-                englishLower.startsWith(lowerQuery) -> matchScore += 80
-                englishLower.contains(lowerQuery) -> matchScore += 70
-            }
-
-            // Check Indonesian word
-            val indonesianLower = vocab.indonesian.toLowerCase()
-            when {
-                indonesianLower == lowerQuery -> matchScore += 90
-                indonesianLower.startsWith(lowerQuery) -> matchScore += 80
-                indonesianLower.contains(lowerQuery) -> matchScore += 70
-            }
-
-            if (matchScore > 0) {
-                searchResults.add(Pair(index, matchScore))
-            }
-        }
-
-        if (searchResults.isNotEmpty()) {
-            // Sort by match score (highest first)
-            searchResults.sortByDescending { it.second }
-            val bestMatchPosition = searchResults.first().first
-
-            // Smooth scroll to the best match
-            recyclerView.smoothScrollToPosition(bestMatchPosition)
-
-            // Show results info
-            val resultCount = searchResults.size
-            val bestMatch = vocabList[bestMatchPosition]
-            Toast.makeText(
-                context,
-                "Ditemukan $resultCount hasil. Menampilkan yang terbaik: ${bestMatch.english}",
-                Toast.LENGTH_LONG
-            ).show()
-
-            // Optional: Highlight the found item briefly
-            recyclerView.postDelayed({
-                adapter.notifyItemChanged(bestMatchPosition)
-            }, 500)
-
-        } else {
-            Toast.makeText(context, "Tidak ditemukan vocabulary yang cocok dengan '$query'", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun toggleSelectMode() {
-        isSelectMode = !isSelectMode
-        isMoveMode = false
-        selectedItems.clear()
-        updateUI()
-
-        recyclerView.post {
-            adapter.notifyDataSetChanged()
-        }
-        activity?.invalidateOptionsMenu()
-    }
-
-    private fun toggleItemSelection(position: Int) {
-        if (position < 0 || position >= vocabList.size) return
-
-        if (selectedItems.contains(position)) {
-            selectedItems.remove(position)
-        } else {
-            selectedItems.add(position)
-        }
-        updateSelectedCountText()
-
-        recyclerView.post {
-            adapter.notifyItemChanged(position)
-        }
-    }
-
-    private fun selectAllItems() {
-        if (vocabList.isEmpty()) {
-            Toast.makeText(context, "Tidak ada item untuk dipilih", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val allSelected = selectedItems.size == vocabList.size
-
-        if (allSelected) {
-            // If all items are selected, deselect all
-            selectedItems.clear()
-            Toast.makeText(context, "Semua item dibatalkan", Toast.LENGTH_SHORT).show()
-        } else {
-            // Select all items
-            selectedItems.clear()
-            for (i in vocabList.indices) {
-                selectedItems.add(i)
-            }
-            Toast.makeText(context, "Semua item dipilih", Toast.LENGTH_SHORT).show()
-        }
-
-        updateSelectedCountText()
-        recyclerView.post {
-            adapter.notifyDataSetChanged()
-        }
-        activity?.invalidateOptionsMenu()
-    }
-
-    private fun updateUI() {
-        when {
-            isSelectMode -> {
-                fabAdd.hide()
-                fabDelete.show()
-                tvSelectedCount.visibility = View.VISIBLE
-                updateSelectedCountText()
-            }
-            isMoveMode -> {
-                fabAdd.hide()
-                fabDelete.hide()
-                tvSelectedCount.visibility = View.GONE
-            }
-            else -> {
-                fabAdd.show()
-                fabDelete.hide()
-                tvSelectedCount.visibility = View.GONE
-            }
-        }
-    }
-
-    private fun updateSelectedCountText() {
-        val count = selectedItems.size
-        tvSelectedCount.text = "$count item dipilih"
     }
 
     private fun showBulkActionDialog() {
@@ -378,48 +287,30 @@ class HomeFragment : Fragment() {
     }
 
     private fun bulkDeleteItems() {
-        val sortedPositions = selectedItems.sortedDescending()
-        for (position in sortedPositions) {
-            if (position >= 0 && position < vocabList.size) {
-                vocabList.removeAt(position)
-            }
-        }
+        val selectedIds = selectedItems.toList()
+        vocabViewModel.deleteVocabByIds(selectedIds)
 
         selectedItems.clear()
         toggleSelectMode()
 
-        recyclerView.post {
-            adapter.notifyDataSetChanged()
-        }
-        saveVocabList()
-
-        Toast.makeText(context, "${sortedPositions.size} item berhasil dihapus", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, "${selectedIds.size} item berhasil dihapus", Toast.LENGTH_SHORT).show()
     }
 
     private fun bulkDeleteIndonesian() {
-        for (position in selectedItems) {
-            if (position >= 0 && position < vocabList.size) {
-                val item = vocabList[position]
-                vocabList[position] = item.copy(indonesian = "")
-            }
-        }
+        val selectedIds = selectedItems.toList()
+        vocabViewModel.clearIndonesianByIds(selectedIds)
 
         val count = selectedItems.size
         selectedItems.clear()
         toggleSelectMode()
 
-        recyclerView.post {
-            adapter.notifyDataSetChanged()
-        }
-        saveVocabList()
-
         Toast.makeText(context, "Terjemahan Indonesia dari $count item berhasil dihapus", Toast.LENGTH_SHORT).show()
     }
 
-    private fun showAddEditDialog(vocabItem: VocabItem? = null, position: Int = -1) {
+    private fun showAddEditDialog(vocabItem: VocabItem? = null) {
         val dialogView = LayoutInflater.from(context).inflate(R.layout.dialog_add_edit_vocab, null)
-        val etEnglish = dialogView.findViewById<android.widget.EditText>(R.id.etEnglish)
-        val etIndonesian = dialogView.findViewById<android.widget.EditText>(R.id.etIndonesian)
+        val etEnglish = dialogView.findViewById<EditText>(R.id.etEnglish)
+        val etIndonesian = dialogView.findViewById<EditText>(R.id.etIndonesian)
 
         vocabItem?.let {
             etEnglish.setText(it.english)
@@ -438,26 +329,25 @@ class HomeFragment : Fragment() {
                 if (english.isNotEmpty()) {
                     if (vocabItem == null) {
                         // Adding new item
-                        val newItem = VocabItem(english = english, indonesian = indonesian)
-                        vocabList.add(newItem)
+                        val newItem = VocabItem(
+                            english = english,
+                            indonesian = indonesian
+                        )
+                        vocabViewModel.insertVocab(newItem)
 
-                        recyclerView.post {
-                            adapter.notifyItemInserted(vocabList.size - 1)
-                            // Scroll to the newly added item with smooth scrolling
-                            recyclerView.smoothScrollToPosition(vocabList.size - 1)
-                        }
-                        saveVocabList()
+                        // Scroll to bottom to show new item
+                        recyclerView.postDelayed({
+                            recyclerView.smoothScrollToPosition(adapter.itemCount - 1)
+                        }, 100)
+
                         Toast.makeText(context, "Vocabulary berhasil ditambahkan", Toast.LENGTH_SHORT).show()
                     } else {
                         // Editing existing item
-                        if (position >= 0 && position < vocabList.size) {
-                            vocabList[position] = vocabItem.copy(english = english, indonesian = indonesian)
-                        }
-
-                        recyclerView.post {
-                            adapter.notifyItemChanged(position)
-                        }
-                        saveVocabList()
+                        val updatedItem = vocabItem.copy(
+                            english = english,
+                            indonesian = indonesian
+                        )
+                        vocabViewModel.updateVocab(updatedItem)
                         Toast.makeText(context, "Vocabulary berhasil diupdate", Toast.LENGTH_SHORT).show()
                     }
                 } else {
@@ -468,20 +358,12 @@ class HomeFragment : Fragment() {
             .show()
     }
 
-    private fun deleteVocabItem(position: Int) {
-        if (position < 0 || position >= vocabList.size) return
-
+    private fun deleteVocabItem(vocab: VocabItem) {
         AlertDialog.Builder(requireContext())
             .setTitle("Hapus Vocabulary")
             .setMessage("Apakah Anda yakin ingin menghapus vocabulary ini?")
             .setPositiveButton("Hapus") { _, _ ->
-                vocabList.removeAt(position)
-
-                recyclerView.post {
-                    adapter.notifyItemRemoved(position)
-                    adapter.notifyItemRangeChanged(position, vocabList.size)
-                }
-                saveVocabList()
+                vocabViewModel.deleteVocab(vocab)
                 Toast.makeText(context, "Vocabulary berhasil dihapus", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("Batal", null)
@@ -489,7 +371,7 @@ class HomeFragment : Fragment() {
     }
 
     private fun deleteAllIndonesianVocab() {
-        val itemsWithIndonesian = vocabList.filter { it.indonesian.isNotEmpty() }
+        val itemsWithIndonesian = currentVocabList.filter { it.indonesian.isNotEmpty() }
 
         if (itemsWithIndonesian.isEmpty()) {
             Toast.makeText(context, "Tidak ada vocabulary dengan bahasa Indonesia untuk dihapus", Toast.LENGTH_SHORT).show()
@@ -500,20 +382,133 @@ class HomeFragment : Fragment() {
             .setTitle("Hapus Semua Bahasa Indonesia")
             .setMessage("Apakah Anda yakin ingin menghapus semua terjemahan bahasa Indonesia? (${itemsWithIndonesian.size} item)")
             .setPositiveButton("Hapus Semua") { _, _ ->
-                vocabList.forEachIndexed { index, item ->
-                    if (item.indonesian.isNotEmpty()) {
-                        vocabList[index] = item.copy(indonesian = "")
-                    }
-                }
-
-                recyclerView.post {
-                    adapter.notifyDataSetChanged()
-                }
-                saveVocabList()
+                vocabViewModel.clearAllIndonesian()
                 Toast.makeText(context, "Semua terjemahan bahasa Indonesia berhasil dihapus", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("Batal", null)
             .show()
+    }
+
+    private fun searchVocabulary(query: String) {
+        val searchResults = mutableListOf<Pair<Int, Int>>()
+
+        currentVocabList.forEachIndexed { index, vocab ->
+            var matchScore = 0
+            val lowerQuery = query.toLowerCase()
+
+            val queryAsNumber = query.toIntOrNull()
+            if (queryAsNumber != null && queryAsNumber == index + 1) {
+                matchScore += 100
+            }
+
+            val englishLower = vocab.english.toLowerCase()
+            when {
+                englishLower == lowerQuery -> matchScore += 90
+                englishLower.startsWith(lowerQuery) -> matchScore += 80
+                englishLower.contains(lowerQuery) -> matchScore += 70
+            }
+
+            val indonesianLower = vocab.indonesian.toLowerCase()
+            when {
+                indonesianLower == lowerQuery -> matchScore += 90
+                indonesianLower.startsWith(lowerQuery) -> matchScore += 80
+                indonesianLower.contains(lowerQuery) -> matchScore += 70
+            }
+
+            if (matchScore > 0) {
+                searchResults.add(Pair(index, matchScore))
+            }
+        }
+
+        if (searchResults.isNotEmpty()) {
+            searchResults.sortByDescending { it.second }
+            val bestMatchPosition = searchResults.first().first
+
+            recyclerView.smoothScrollToPosition(bestMatchPosition)
+
+            val resultCount = searchResults.size
+            val bestMatch = currentVocabList[bestMatchPosition]
+            Toast.makeText(
+                context,
+                "Ditemukan $resultCount hasil. Menampilkan yang terbaik: ${bestMatch.english}",
+                Toast.LENGTH_LONG
+            ).show()
+
+            recyclerView.postDelayed({
+                adapter.notifyItemChanged(bestMatchPosition)
+            }, 500)
+        } else {
+            Toast.makeText(context, "Tidak ditemukan vocabulary yang cocok dengan '$query'", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun toggleSelectMode() {
+        isSelectMode = !isSelectMode
+        isMoveMode = false
+        selectedItems.clear()
+        updateUI()
+        adapter.notifyDataSetChanged()
+        activity?.invalidateOptionsMenu()
+    }
+
+    private fun toggleItemSelection(vocabId: Long) {
+        if (selectedItems.contains(vocabId)) {
+            selectedItems.remove(vocabId)
+        } else {
+            selectedItems.add(vocabId)
+        }
+        updateSelectedCountText()
+        adapter.notifyDataSetChanged()
+    }
+
+    private fun selectAllItems() {
+        if (currentVocabList.isEmpty()) {
+            Toast.makeText(context, "Tidak ada item untuk dipilih", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val allSelected = selectedItems.size == currentVocabList.size
+
+        if (allSelected) {
+            selectedItems.clear()
+            Toast.makeText(context, "Semua item dibatalkan", Toast.LENGTH_SHORT).show()
+        } else {
+            selectedItems.clear()
+            currentVocabList.forEach { vocab ->
+                selectedItems.add(vocab.id)
+            }
+            Toast.makeText(context, "Semua item dipilih", Toast.LENGTH_SHORT).show()
+        }
+
+        updateSelectedCountText()
+        adapter.notifyDataSetChanged()
+        activity?.invalidateOptionsMenu()
+    }
+
+    private fun updateUI() {
+        when {
+            isSelectMode -> {
+                fabAdd.hide()
+                fabDelete.show()
+                tvSelectedCount.visibility = View.VISIBLE
+                updateSelectedCountText()
+            }
+            isMoveMode -> {
+                fabAdd.hide()
+                fabDelete.hide()
+                tvSelectedCount.visibility = View.GONE
+            }
+            else -> {
+                fabAdd.show()
+                fabDelete.hide()
+                tvSelectedCount.visibility = View.GONE
+            }
+        }
+    }
+
+    private fun updateSelectedCountText() {
+        val count = selectedItems.size
+        tvSelectedCount.text = "$count item dipilih"
     }
 
     override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
@@ -534,8 +529,7 @@ class HomeFragment : Fragment() {
                 moveItem?.isVisible = false
                 deleteAllItem?.isVisible = false
 
-                // Update select all icon and title based on selection state
-                val allSelected = selectedItems.size == vocabList.size && vocabList.isNotEmpty()
+                val allSelected = selectedItems.size == currentVocabList.size && currentVocabList.isNotEmpty()
                 if (allSelected) {
                     selectAllItem?.setTitle("Batal Pilih Semua")
                     selectAllItem?.setIcon(R.drawable.ic_deselect_all)
@@ -621,25 +615,6 @@ class HomeFragment : Fragment() {
                 true
             }
             else -> super.onOptionsItemSelected(item)
-        }
-    }
-
-    private fun saveVocabList() {
-        val json = gson.toJson(vocabList)
-        sharedPreferences.edit().putString(VOCAB_LIST_KEY, json).apply()
-    }
-
-    private fun loadVocabList() {
-        val json = sharedPreferences.getString(VOCAB_LIST_KEY, null)
-        if (json != null) {
-            val type = object : TypeToken<MutableList<VocabItem>>() {}.type
-            val loadedList: MutableList<VocabItem> = gson.fromJson(json, type)
-            vocabList.clear()
-            vocabList.addAll(loadedList)
-
-            recyclerView.post {
-                adapter.notifyDataSetChanged()
-            }
         }
     }
 }

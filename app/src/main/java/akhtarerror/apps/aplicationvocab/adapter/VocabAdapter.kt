@@ -1,5 +1,7 @@
-package akhtarerror.apps.aplicationvocab
+package akhtarerror.apps.aplicationvocab.adapter
 
+import akhtarerror.apps.aplicationvocab.R
+import akhtarerror.apps.aplicationvocab.vocab.item.VocabItem
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -7,18 +9,19 @@ import android.widget.CheckBox
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 
 class VocabAdapter(
-    private val vocabList: MutableList<VocabItem>,
     private val isSelectMode: () -> Boolean,
     private val isMoveMode: () -> Boolean,
-    private val selectedItems: MutableSet<Int>,
-    private val onItemAction: (Action, Int) -> Unit
-) : RecyclerView.Adapter<VocabAdapter.VocabViewHolder>() {
+    private val selectedItems: MutableSet<Long>, // Changed to Long for Room IDs
+    private val onItemAction: (Action, VocabItem, Int) -> Unit // Pass VocabItem instead of just position
+) : ListAdapter<VocabItem, VocabAdapter.VocabViewHolder>(VocabDiffCallback()) {
 
     enum class Action {
-        EDIT, DELETE, SELECT, CLICK
+        EDIT, DELETE, SELECT, CLICK, MOVE
     }
 
     class VocabViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
@@ -38,7 +41,7 @@ class VocabAdapter(
     }
 
     override fun onBindViewHolder(holder: VocabViewHolder, position: Int) {
-        val vocab = vocabList[position]
+        val vocab = getItem(position)
 
         // Set the number (position + 1 for 1-based numbering)
         holder.tvNumber.text = "${position + 1}."
@@ -60,56 +63,44 @@ class VocabAdapter(
         // Handle different modes
         when {
             isSelectMode() -> {
-                // Select mode
                 holder.btnEdit.visibility = View.GONE
                 holder.btnDelete.visibility = View.GONE
                 holder.dragHandle.visibility = View.GONE
                 holder.checkBox.visibility = View.VISIBLE
 
-                // Remove previous listener first to prevent unwanted triggers
                 holder.checkBox.setOnCheckedChangeListener(null)
+                holder.checkBox.isChecked = selectedItems.contains(vocab.id)
 
-                // Set checkbox state without triggering listener
-                holder.checkBox.isChecked = selectedItems.contains(position)
-
-                // Set the listener after setting the state
                 holder.checkBox.setOnCheckedChangeListener { _, _ ->
-                    // Post the action to avoid RecyclerView layout conflicts
                     holder.itemView.post {
-                        onItemAction(Action.SELECT, holder.adapterPosition)
+                        onItemAction(Action.SELECT, vocab, holder.adapterPosition)
                     }
                 }
 
-                // Make the entire item clickable for selection
                 holder.itemView.setOnClickListener {
-                    // Post the action to avoid RecyclerView layout conflicts
                     holder.itemView.post {
                         val currentPosition = holder.adapterPosition
                         if (currentPosition != RecyclerView.NO_POSITION) {
-                            onItemAction(Action.CLICK, currentPosition)
+                            onItemAction(Action.CLICK, vocab, currentPosition)
                         }
                     }
                 }
             }
             isMoveMode() -> {
-                // Move mode - show drag handle
                 holder.btnEdit.visibility = View.GONE
                 holder.btnDelete.visibility = View.GONE
                 holder.dragHandle.visibility = View.VISIBLE
                 holder.checkBox.visibility = View.GONE
 
-                // Remove click listener in move mode
                 holder.itemView.setOnClickListener(null)
                 holder.checkBox.setOnCheckedChangeListener(null)
             }
             else -> {
-                // Normal mode
                 holder.btnEdit.visibility = View.VISIBLE
                 holder.btnDelete.visibility = View.VISIBLE
                 holder.dragHandle.visibility = View.GONE
                 holder.checkBox.visibility = View.GONE
 
-                // Remove listeners in normal mode
                 holder.itemView.setOnClickListener(null)
                 holder.checkBox.setOnCheckedChangeListener(null)
             }
@@ -119,31 +110,40 @@ class VocabAdapter(
         holder.btnEdit.setOnClickListener {
             val currentPosition = holder.adapterPosition
             if (currentPosition != RecyclerView.NO_POSITION) {
-                onItemAction(Action.EDIT, currentPosition)
+                onItemAction(Action.EDIT, vocab, currentPosition)
             }
         }
 
         holder.btnDelete.setOnClickListener {
             val currentPosition = holder.adapterPosition
             if (currentPosition != RecyclerView.NO_POSITION) {
-                onItemAction(Action.DELETE, currentPosition)
+                onItemAction(Action.DELETE, vocab, currentPosition)
             }
         }
     }
 
-    override fun getItemCount(): Int = vocabList.size
-
     // Method to move item for drag and drop
-    fun moveItem(fromPosition: Int, toPosition: Int) {
+    fun moveItem(fromPosition: Int, toPosition: Int): List<VocabItem> {
+        val currentList = currentList.toMutableList()
         if (fromPosition < toPosition) {
             for (i in fromPosition until toPosition) {
-                vocabList[i] = vocabList[i + 1].also { vocabList[i + 1] = vocabList[i] }
+                currentList[i] = currentList[i + 1].also { currentList[i + 1] = currentList[i] }
             }
         } else {
             for (i in fromPosition downTo toPosition + 1) {
-                vocabList[i] = vocabList[i - 1].also { vocabList[i - 1] = vocabList[i] }
+                currentList[i] = currentList[i - 1].also { currentList[i - 1] = currentList[i] }
             }
         }
-        notifyItemMoved(fromPosition, toPosition)
+        return currentList
+    }
+
+    class VocabDiffCallback : DiffUtil.ItemCallback<VocabItem>() {
+        override fun areItemsTheSame(oldItem: VocabItem, newItem: VocabItem): Boolean {
+            return oldItem.id == newItem.id
+        }
+
+        override fun areContentsTheSame(oldItem: VocabItem, newItem: VocabItem): Boolean {
+            return oldItem == newItem
+        }
     }
 }

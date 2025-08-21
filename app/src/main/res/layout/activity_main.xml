@@ -28,9 +28,9 @@
     <!-- Fragment Container with proper behavior -->
     <FrameLayout
         android:id="@+id/fragmentContainer"
+        android:layout_marginBottom="76dp"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_marginBottom="71dp"
         app:layout_behavior="@string/appbar_scrolling_view_behavior" />
 
     <!-- Bottom Navigation -->
